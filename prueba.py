@@ -1,92 +1,78 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from sentence_transformers import SentenceTransformer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from sentence_transformers import SentenceTransformer, util
 import torch
-import faiss
-import os
-from huggingface_hub import login
+import json
 
-# 1. Iniciar sesión en Hugging Face (usa token solo si es necesario)
-# Iniciar sesión en Hugging Face
-login("")
+# 🔐 Autenticación si es privada (sólo si el modelo lo requiere)
+# from huggingface_hub import login
+# login(token="TU_TOKEN")
 
-# 2. Configurar dispositivo
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# 📌 Configuración
+MODEL_NAME = "openchat/openchat-3.5-0106"
+MEMORY_FILE = "memory.json"
 
-# 3. Cargar modelo de lenguaje
-print("🔍 Cargando modelo Mistral...")
-model_name = "mistralai/Mistral-7B-Instruct-v0.1"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+# 💻 Carga el modelo en 4-bit y en GPU
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float16,
-    device_map="auto"
-).to(device)
+    MODEL_NAME,
+    device_map="auto",
+    load_in_4bit=True
+)
 
-# 4. Cargar modelo de embeddings
-print("🧠 Cargando modelo de embeddings...")
-embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+# 🚀 Crea el pipeline
+pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0)
 
-# 5. Inicializar memoria e índice FAISS
-memory = []
-index = faiss.IndexFlatL2(384)  # 384 = tamaño de vector de MiniLM-L6-v2
+# 🧠 Carga modelo de embeddings para memoria
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# 6. Función para obtener contexto similar
-def obtener_contexto(mensaje, k=3):
-    if len(memory) == 0:
-        return ""
-    query_vector = embed_model.encode([mensaje], convert_to_numpy=True)
-    D, I = index.search(query_vector, k)
-    contexto = []
-    for idx in I[0]:
-        if idx < len(memory):  # Protección por si el índice está fuera de rango
-            m = memory[idx]
-            contexto.append(f"Usuario: {m['mensaje']}\nZeta: {m['respuesta']}")
-    return "\n".join(contexto)
+# 🗂️ Funciones de memoria
+def load_memory():
+    try:
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
 
-# 7. Función para crear el prompt
-def crear_prompt(contexto, mensaje):
-    return (
-        "Eres Zeta, un asistente amistoso, inteligente y curioso. "
-        "Recuerdas lo que te han dicho y das respuestas naturales y útiles.\n\n"
-        f"Contexto previo:\n{contexto}\n\n"
-        f"Usuario: {mensaje}\n"
-        "Zeta:"
-    )
+def save_memory(memory):
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(memory, f)
 
-# 8. Limpieza del texto generado
-def limpiar_respuesta(texto_completo):
-    partes = texto_completo.split("Zeta:")
-    if len(partes) > 1:
-        return partes[-1].strip()
-    return texto_completo.strip()
+def add_memory(memory, text):
+    embedding = embedder.encode(text).tolist()
+    memory.append({"text": text, "embedding": embedding})
+    save_memory(memory)
 
-# 9. Bucle de conversación
-print("💬 Zeta está listo. Escribe 'salir' para terminar la conversación.")
+def retrieve_relevant(memory, query, top_k=3):
+    if not memory:
+        return []
+    query_emb = embedder.encode(query)
+    embeddings = [m["embedding"] for m in memory]
+    scores = util.cos_sim(query_emb, embeddings)[0]
+    top_results = sorted(zip(scores, memory), key=lambda x: x[0], reverse=True)[:top_k]
+    return [r[1]["text"] for r in top_results]
 
+# 🧠 Memoria activa
+memory = load_memory()
+
+print("🟢 Zeta (OpenChat 3.5 en 4-bit) está listo. Escribe 'salir' para terminar.")
+
+# 💬 Loop de conversación
 while True:
     entrada = input("Tú: ").strip()
     if entrada.lower() == "salir":
+        print("Zeta: ¡Hasta luego!")
         break
 
-    contexto = obtener_contexto(entrada)
-    prompt = crear_prompt(contexto, entrada)
+    relevantes = retrieve_relevant(memory, entrada)
+    contexto = "\n".join(relevantes)
+    prompt = f"Eres Zeta, un asistente amable y creativo.\nContexto:\n{contexto}\nUsuario: {entrada}\nZeta:"
 
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(device)
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=150,
-        temperature=0.7,
-        top_p=0.95,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id
-    )
+    respuesta = pipe(prompt, max_new_tokens=100, temperature=0.7, top_p=0.9, do_sample=True)[0]["generated_text"]
+    # Extraer solo lo nuevo
+    output = respuesta[len(prompt):].strip().split("\n")[0]
 
-    respuesta = limpiar_respuesta(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    print("Zeta:", output)
 
-    print("Zeta:", respuesta)
-
-    # Guardar en memoria e índice FAISS
-    memory.append({"mensaje": entrada, "respuesta": respuesta})
-    vector = embed_model.encode([entrada], convert_to_numpy=True)
-    index.add(vector)
-
+    # Guardar en memoria
+    add_memory(memory, f"Usuario dijo: {entrada}")
+    add_memory(memory, f"Zeta respondió: {output}")
