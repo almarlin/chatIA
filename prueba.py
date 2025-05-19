@@ -1,31 +1,32 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 from sentence_transformers import SentenceTransformer, util
-import torch
-import json
+import torch, json
+from huggingface_hub import login
 
 # 🔐 Autenticación si es privada (sólo si el modelo lo requiere)
-# from huggingface_hub import login
-# login(token="TU_TOKEN")
+
+login(token="")
+
 
 # 📌 Configuración
-MODEL_NAME = "openchat/openchat-3.5-0106"
+MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 MEMORY_FILE = "memory.json"
 
-# 💻 Carga el modelo en 4-bit y en GPU
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+# 🧠 Tokenizer y modelo en GPU
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
     device_map="auto",
-    load_in_4bit=True
+    torch_dtype=torch.float16
 )
 
-# 🚀 Crea el pipeline
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0)
+# 🌀 Streamer para mostrar token por token
+streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
-# 🧠 Carga modelo de embeddings para memoria
+# 🔎 Embeddings para memoria
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# 🗂️ Funciones de memoria
+# 📁 Funciones de memoria
 def load_memory():
     try:
         with open(MEMORY_FILE, "r") as f:
@@ -51,12 +52,12 @@ def retrieve_relevant(memory, query, top_k=3):
     top_results = sorted(zip(scores, memory), key=lambda x: x[0], reverse=True)[:top_k]
     return [r[1]["text"] for r in top_results]
 
-# 🧠 Memoria activa
+# 🧠 Carga memoria
 memory = load_memory()
 
-print("🟢 Zeta (OpenChat 3.5 en 4-bit) está listo. Escribe 'salir' para terminar.")
+print("🟢 Zeta (Mistral 7B con streaming) está lista. Escribe 'salir' para terminar.")
 
-# 💬 Loop de conversación
+# 💬 Bucle de conversación
 while True:
     entrada = input("Tú: ").strip()
     if entrada.lower() == "salir":
@@ -65,14 +66,21 @@ while True:
 
     relevantes = retrieve_relevant(memory, entrada)
     contexto = "\n".join(relevantes)
-    prompt = f"Eres Zeta, un asistente amable y creativo.\nContexto:\n{contexto}\nUsuario: {entrada}\nZeta:"
+    
+    # ⚙️ Prompt para Mistral (instrucciones entre etiquetas [INST])
+    prompt = f"<s>[INST] Eres Zeta, un asistente amable y creativo.\nContexto:\n{contexto}\nUsuario: {entrada} [/INST]"
 
-    respuesta = pipe(prompt, max_new_tokens=100, temperature=0.7, top_p=0.9, do_sample=True)[0]["generated_text"]
-    # Extraer solo lo nuevo
-    output = respuesta[len(prompt):].strip().split("\n")[0]
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-    print("Zeta:", output)
+    print("Zeta: ", end="", flush=True)
+    model.generate(
+        **inputs,
+        max_new_tokens=100,
+        temperature=0.7,
+        do_sample=True,
+        streamer=streamer
+    )
 
-    # Guardar en memoria
+    # Guarda en memoria (si quieres capturar la respuesta exacta, podemos hacerlo sin el streamer)
     add_memory(memory, f"Usuario dijo: {entrada}")
-    add_memory(memory, f"Zeta respondió: {output}")
+    # También podrías capturar la salida con `StoppingCriteria` o usar `tokenizer.decode` si se desea

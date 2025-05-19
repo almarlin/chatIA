@@ -1,42 +1,46 @@
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+# from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+# import torch
+# from threading import Thread
 
-# Cargar el modelo GPT-2 y su tokenizer
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-model = GPT2LMHeadModel.from_pretrained("gpt2")
+# MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 
-# Estructura para almacenar la memoria (historial de conversaciones)
-historial_conversacion = ""
+# # Tokenizador y modelo
+# tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+# model = AutoModelForCausalLM.from_pretrained(
+#     MODEL_NAME,
+#     device_map="auto",
+#     torch_dtype=torch.float16,
+# )
 
-# Función para generar respuestas usando GPT-2 con memoria
-def generar_respuesta(contexto: str) -> str:
-    global historial_conversacion
-    
-    # Añadir la nueva entrada al historial
-    historial_conversacion += f"Usuario: {contexto}\n"
-    
-    # Codificar el contexto del historial de conversación
-    inputs = tokenizer.encode(historial_conversacion, return_tensors="pt")
-    
-    # Generar la respuesta con el modelo
-    outputs = model.generate(inputs, max_length=150, num_return_sequences=1, no_repeat_ngram_size=2, temperature=0.2)
-    
-    # Decodificar y extraer la respuesta generada
-    respuesta = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # Extraer solo la respuesta generada por el modelo (descartando el contexto)
-    respuesta_usuario = respuesta[len(historial_conversacion):].strip()
-    
-    # Añadir la respuesta al historial
-    historial_conversacion += f"Zeta: {respuesta_usuario}\n"
-    
-    return respuesta_usuario
+# # Historial por usuario
+# historiales = {}
 
-# Bucle principal para la interacción
-print("Escribe 'salir' para terminar la conversación.")
-while True:
-    entrada = input("Tú: ")
-    if entrada.lower() == "salir":
-        break
+# def generar_respuesta(user_id: str, contexto: str) -> str:
+#     if user_id not in historiales:
+#         historiales[user_id] = []
 
-    respuesta = generar_respuesta(entrada)
-    print("Zeta:", respuesta)
+#     historiales[user_id].append(f"Usuario: {contexto}")
+#     prompt = "\n".join(historiales[user_id]) + "\nAsistente:"
+
+#     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+#     streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+#     generation_kwargs = {
+#         "input_ids": inputs["input_ids"],
+#         "attention_mask": inputs["attention_mask"],
+#         "max_new_tokens": 60,
+#         "temperature": 0.7,
+#         "top_p": 0.9,
+#         "do_sample": True,
+#         "streamer": streamer,
+#     }
+
+#     thread = Thread(target=model.generate, kwargs=generation_kwargs)
+#     thread.start()
+
+#     respuesta = ""
+#     for new_text in streamer:
+#         respuesta += new_text
+
+#     historiales[user_id].append(f"Asistente: {respuesta.strip()}")
+#     return respuesta.strip()

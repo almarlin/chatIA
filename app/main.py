@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from mistral_chatbot import generate_streaming_response
 from pydantic import BaseModel
-from chatbot import generar_respuesta
+# from chatbot import generar_respuesta
 from memory import cargar_memoria, guardar_memoria
 import uvicorn
 from pathlib import Path
@@ -59,24 +61,16 @@ def save_users(users):
         json.dump(users, f, indent=4)
 
 # Endpoints
-# Cargar el modelo de transformers (DialoGPT, GPT-2, etc.)
-chatbot = pipeline("conversational", model="microsoft/DialoGPT-medium")
-@app.post("/chat")
-async def chat_endpoint(chat: Chat):
-    # Cargar el historial de conversación del usuario
-    textos_previos = cargar_memoria(chat.user_id)
-    
-    # Crear el contexto que el chatbot utilizará (historial + mensaje actual)
-    contexto = " ".join(textos_previos) + " " + chat.message
-    
-    # Generar una respuesta con el modelo GPT-2
-    respuesta = generar_respuesta(contexto)
-    
-    # Guardar el mensaje actual en la memoria del usuario
-    guardar_memoria(chat.user_id, chat.message)
-    
-    # Devolver la respuesta generada
-    return {"respuesta": respuesta}
+
+@app.get("/chat/stream")
+async def chat_stream(user_id: str, message: str):
+    async def event_generator():
+        async for token in generate_streaming_response(user_id, message):
+            yield f"data: {token}\n\n"
+        yield f"data: [END]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 # Registro
 @app.post("/register")
