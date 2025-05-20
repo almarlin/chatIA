@@ -65,11 +65,22 @@ def save_users(users):
 @app.get("/chat/stream")
 async def chat_stream(user_id: str, message: str):
     async def event_generator():
-        async for token in generate_streaming_response(user_id, message):
+        historial = cargar_memoria(user_id)
+
+        # Guardar mensaje del usuario
+        guardar_memoria(user_id, f"Usuario: {message}")
+
+        response_text = ""
+        async for token in generate_streaming_response(message, historial):
+            response_text += token
             yield f"data: {token}\n\n"
+
+        # Guardar la respuesta completa del asistente
+        guardar_memoria(user_id, f"Zeta: {response_text.strip()}")
         yield f"data: [END]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 
 # Registro
