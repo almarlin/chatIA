@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Navbar from "../components/navbar";
+import Footer from "../components/footer";
 
 function Chat() {
   const [message, setMessage] = useState("");
@@ -62,11 +63,12 @@ function Chat() {
   };
 
   return (
-    <>
+
+    <div className="flex flex-col min-h-screen">
       <Navbar />
-      <div className="p-4 max-w-xl mx-auto">
-        <h1 className="text-xl mb-4">Zeta</h1>
-        <div className="border p-4 mb-4 h-64 overflow-y-scroll bg-gray-100 rounded">
+      <div className="p-4 w-full max-w-full">
+        <h1 className="text-6xl text-center font-bold mb-5">Zeta AI</h1>
+        <div className="border p-4 mb-4 h-80 overflow-y-scroll bg-gray-100 rounded w-full">
           {chatLog.map((msg, i) => (
             <div
               key={i}
@@ -96,8 +98,11 @@ function Chat() {
           )}
         </div>
       </div>
-    </>
+      <Footer />
+    </div>
+
   );
+
 }
 
 export default Chat;
