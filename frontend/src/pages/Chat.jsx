@@ -66,38 +66,40 @@ function Chat() {
 
     <div className="flex flex-col min-h-screen">
       <Navbar />
-      <div className="p-4 w-full max-w-full">
-        <h1 className="text-6xl text-center font-bold mb-5">Zeta AI</h1>
-        <div className="border p-4 mb-4 h-80 overflow-y-scroll bg-gray-100 rounded w-full">
-          {chatLog.map((msg, i) => (
-            <div
-              key={i}
-              className={`mb-2 ${msg.from === "user" ? "text-right" : "text-left"}`}
-            >
-              <span className="inline-block bg-white p-2 rounded shadow whitespace-pre-line">
-                {msg.text}
-              </span>
-            </div>
-          ))}
+      <main className="flex-grow">
+        <div className="p-4 w-full max-w-full">
+          <h1 className="text-6xl text-center font-bold mb-5">Zeta AI</h1>
+          <div className="border p-4 mb-4 h-80 overflow-y-scroll bg-gray-100 rounded w-full">
+            {chatLog.map((msg, i) => (
+              <div
+                key={i}
+                className={`mb-2 ${msg.from === "user" ? "text-right" : "text-left"}`}
+              >
+                <span className="inline-block bg-white p-2 rounded shadow whitespace-pre-line">
+                  {msg.text}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex">
+            <input
+              className="border flex-1 p-2 mr-2"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Escribe tu mensaje..."
+              disabled={isStreaming}
+            />
+            {!isStreaming && (
+              <button
+                onClick={sendMessage}
+                className="bg-green-700 text-white px-4 py-2 rounded"
+              >
+                Enviar
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex">
-          <input
-            className="border flex-1 p-2 mr-2"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Escribe tu mensaje..."
-            disabled={isStreaming}
-          />
-          {!isStreaming && (
-            <button
-              onClick={sendMessage}
-              className="bg-green-700 text-white px-4 py-2 rounded"
-            >
-              Enviar
-            </button>
-          )}
-        </div>
-      </div>
+      </main>
       <Footer />
     </div>
 
